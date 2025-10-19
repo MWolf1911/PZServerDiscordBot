@@ -1,12 +1,13 @@
 ﻿#define EXPORT_DEFAULT_LOCALIZATION
 
 using Discord;
-using Discord.Commands;
+using Discord.Interactions;
 using Discord.WebSocket;
 using Newtonsoft.Json;
 using System;
 using System.IO;
 using System.Threading.Tasks;
+using Microsoft.Extensions.DependencyInjection;
 
 public static class Application
 {
@@ -15,9 +16,9 @@ public static class Application
     public static Settings.BotSettings     BotSettings;
 
     public static DiscordSocketClient  Client;
-    public static CommandService       Commands;
+    public static InteractionService   Interactions;
     public static IServiceProvider     Services;
-    public static CommandHandler       CommandHandler;
+    public static InteractionHandler   InteractionHandler;
     public static DateTime             StartTime = DateTime.UtcNow;
 
     private static bool botInitialCheck = false;
@@ -100,23 +101,35 @@ public static class Application
         ServerUtility.ServerProcess = ServerUtility.Commands.StartServer();
     #endif
 
-        Client   = new DiscordSocketClient(new DiscordSocketConfig() { GatewayIntents = GatewayIntents.All });
-        Commands = new CommandService();
-        Services = null;
-        CommandHandler = new CommandHandler(Client, Commands, Services);
-
-        await CommandHandler.SetupAsync();
+        Client = new DiscordSocketClient(new DiscordSocketConfig() { GatewayIntents = GatewayIntents.All });
+        Interactions = new InteractionService(Client);
+        
+        Services = new ServiceCollection()
+            .AddSingleton(Client)
+            .AddSingleton(Interactions)
+            .BuildServiceProvider();
+        
+        InteractionHandler = new InteractionHandler(Client, Interactions, Services);
+        await InteractionHandler.InitializeAsync();
+        
         await Client.LoginAsync(TokenType.Bot, DiscordUtility.GetToken());
         await Client.StartAsync();
         await Client.SetGameAsync(Localization.Get("info_disc_act_bot_ver").KeyFormat(("version", BotVersion)));
-
-        DiscordUtility.OrganizeCommands();
 
         Client.Ready += async () =>
         {
             if(!botInitialCheck)
             {
                 botInitialCheck = true;
+
+                try 
+                {
+                    await Interactions.RegisterCommandsGloballyAsync();
+                }
+                catch(Exception ex)
+                {
+                    Logger.LogException(ex);
+                }
 
                 await DiscordUtility.DoChannelCheck();
                 await BotUtility.NotifyLatestBotVersion();
@@ -127,16 +140,17 @@ public static class Application
         Client.Disconnected += async (ex) =>
         {
             Logger.LogException(ex);
-            Logger.LogException(ex.InnerException);
+            if(ex.InnerException != null)
+                Logger.LogException(ex.InnerException);
 
-            if(ex.InnerException.Message.Contains("Authentication failed"))
+            if(ex.InnerException?.Message.Contains("Authentication failed") == true)
             {
                 Console.WriteLine(Localization.Get("err_disc_auth_fail"));
                 await Task.Delay(-1);
             }
-            //else Console.WriteLine(Localization.Get("err_disc_disconn").KeyFormat(("log_file", Logger.LogFile), ("repo_url", BotRepoURL)));
         };
 
         await Task.Delay(-1);
     }
 }
+

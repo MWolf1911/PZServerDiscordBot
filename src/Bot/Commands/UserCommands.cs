@@ -1,86 +1,84 @@
-﻿using Discord.Commands;
+using Discord;
+using Discord.Interactions;
 using System;
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
 
-public class UserCommands : ModuleBase<SocketCommandContext>
+public class UserCommands : InteractionModuleBase<SocketInteractionContext>
 {
-    [Command("bot_info")]
-    [Summary("Displays information about this bot. (!bot_info)")]
+    [SlashCommand("bot_info", "Displays information about this bot.")]
     public async Task BotInfo()
     {
-        await Context.Message.AddReactionAsync(EmojiList.GreenCheck);
-        await Context.Channel.SendMessageAsync(Localization.Get("disc_cmd_bot_info_text").KeyFormat(("repo_url", Application.BotRepoURL)));
+        await RespondAsync(Localization.Get("disc_cmd_bot_info_text").KeyFormat(("repo_url", Application.BotRepoURL)), ephemeral: true);
     }
 
-    [Command("server_status")]
-    [Summary("Gets the server status. (!server_status)")]
+    [SlashCommand("server_status", "Gets the server status.")]
     public async Task ServerStatus()
     {
-        await Context.Message.AddReactionAsync(EmojiList.GreenCheck);
-        await Context.Channel.SendMessageAsync(ServerUtility.IsServerRunning() 
-                                             ? Localization.Get("disc_cmd_server_status_running")
-                                             : ServerBackupCreator.IsRunning
-                                             ? Localization.Get("disc_cmd_server_status_backup")
-                                             : Localization.Get("disc_cmd_server_status_dead"));
+        string status = ServerUtility.IsServerRunning() 
+                       ? Localization.Get("disc_cmd_server_status_running")
+                       : ServerBackupCreator.IsRunning
+                       ? Localization.Get("disc_cmd_server_status_backup")
+                       : Localization.Get("disc_cmd_server_status_dead");
+        
+        await RespondAsync(status, ephemeral: true);
     }
 
-    [Command("restart_time")]
-    [Summary("Gets the next automated restart time. (!restart_time)")]
+    [SlashCommand("restart_time", "Gets the next automated restart time.")]
     public async Task RebootTime()
     {
         var timestamp = new DateTimeOffset(Scheduler.GetItem("ServerRestart").NextExecuteTime).ToUnixTimeSeconds();
-
-        await Context.Message.AddReactionAsync(EmojiList.GreenCheck);
-        await Context.Channel.SendMessageAsync(Localization.Get("disc_cmd_restart_time_text").KeyFormat(("timestamp", timestamp)));
+        await RespondAsync(Localization.Get("disc_cmd_restart_time_text").KeyFormat(("timestamp", timestamp)), ephemeral: true);
     }
 
-    [Command("game_date")]
-    [Summary("Gets the current in-game date. (!game_date)")]
+    [SlashCommand("game_date", "Gets the current in-game date.")]
     public async Task GameDate()
     {
         string mapTimeFile = ServerPath.MapTimeFilePath();
 
         if(!File.Exists(mapTimeFile))
         {
-            Logger.WriteLog(string.Format("[UserCommand - game_date] Couldn't find path: ", mapTimeFile));
-            
-            await Context.Message.AddReactionAsync(EmojiList.RedCross);
-            await Context.Channel.SendMessageAsync(Localization.Get("disc_cmd_game_date_warn_file"));
+            Logger.WriteLog($"[UserCommand - game_date] Couldn't find path: {mapTimeFile}");
+            await RespondAsync(Localization.Get("disc_cmd_game_date_warn_file"), ephemeral: true);
             return;
         }
 
-        // All bytes are in Big-Endian order
         byte[] fileBytes  = File.ReadAllBytes(mapTimeFile);
         byte[] dayBytes   = fileBytes.Skip(0x1C).Take(4).ToArray(); 
         byte[] monthBytes = fileBytes.Skip(0x20).Take(4).ToArray();
         byte[] yearBytes  = fileBytes.Skip(0x24).Take(4).ToArray();
 
-        int day   = (dayBytes[0] << 24
-                  |  dayBytes[1] << 16
-                  |  dayBytes[2] << 8
-                  |  dayBytes[3] << 0)
-                  + 1;
+        int day   = (dayBytes[0] << 24) | (dayBytes[1] << 16) | (dayBytes[2] << 8) | dayBytes[3];
+        int month = (monthBytes[0] << 24) | (monthBytes[1] << 16) | (monthBytes[2] << 8) | monthBytes[3];
+        int year  = (yearBytes[0] << 24) | (yearBytes[1] << 16) | (yearBytes[2] << 8) | yearBytes[3];
 
-        int month = (monthBytes[0] << 24
-                  |  monthBytes[1] << 16
-                  |  monthBytes[2] << 8
-                  |  monthBytes[3] << 0)
-                  + 1;
-        
-        int year  = yearBytes[0] << 24
-                  | yearBytes[1] << 16
-                  | yearBytes[2] << 8
-                  | yearBytes[3] << 0;
+        await RespondAsync($"{day}/{month}/{year}", ephemeral: true);
+    }
 
-        string responseText = Localization.Get("disc_cmd_game_date_response").KeyFormat(
-            ("day", day.ToString().PadLeft(2, '0')), 
-            ("month", month.ToString().PadLeft(2, '0')), 
-            ("year", year)
-        );
+    [SlashCommand("player_perks", "Gets a player's perks from the last log.")]
+    public async Task GetPlayerPerks([Summary("player_name", "The player's name")] string playerName)
+    {
+        var perkData = ServerLogParsers.PerkLog.GetPlayerPerks(playerName);
 
-        await Context.Message.AddReactionAsync(EmojiList.GreenCheck);
-        await Context.Channel.SendMessageAsync(responseText);
+        if(perkData == null)
+        {
+            await RespondAsync(Localization.Get("disc_cmd_player_perks_not_fnd").KeyFormat(("name", playerName)), ephemeral: true);
+            return;
+        }
+
+        var embed = new EmbedBuilder()
+        {
+            Title = $"{perkData.Username}",
+            Description = $"Steam ID: {perkData.SteamId}\nLog Date: {perkData.LogDate}",
+            Color = Color.Blue
+        };
+
+        foreach(var perk in perkData.Perks)
+        {
+            embed.AddField(perk.Key, perk.Value.ToString());
+        }
+
+        await RespondAsync(embed: embed.Build(), ephemeral: true);
     }
 }

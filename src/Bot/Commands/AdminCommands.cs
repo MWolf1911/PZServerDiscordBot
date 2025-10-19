@@ -1,18 +1,11 @@
-﻿using Discord.Commands;
-using Newtonsoft.Json;
-using System;
-using System.Collections.Generic;
-using System.IO;
+using Discord.Interactions;
 using System.Threading.Tasks;
 
-public class AdminCommands : ModuleBase<SocketCommandContext>
+public class AdminCommands : InteractionModuleBase<SocketInteractionContext>
 {
-    [Command("debug")]
-    [Summary("Command enabled for debug purposes. (!debug ...)")]
-    [Remarks("skip")]
-    public async Task Debug(string param1="", string param2="", string param3="")
+    [SlashCommand("debug", "Debug command")]
+    public async Task Debug()
     {
-        await Context.Message.AddReactionAsync(EmojiList.GreenCheck);
-        await SteamWebAPI.GetWorkshopItemDetails(new string[] {  });
+        await RespondAsync("Debug mode", ephemeral: true);
     }
 }
