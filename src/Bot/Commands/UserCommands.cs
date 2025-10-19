@@ -59,9 +59,9 @@ public class UserCommands : InteractionModuleBase<SocketInteractionContext>
     [SlashCommand("player_perks", "Gets a player's perks from the last log.")]
     public async Task GetPlayerPerks([Summary("player_name", "The player's name")] string playerName)
     {
-        var perkData = ServerLogParsers.PerkLog.GetPlayerPerks(playerName);
-
-        if(perkData == null)
+        var allPerks = ServerLogParsers.PerkLog.Get();
+        
+        if(allPerks == null || !allPerks.TryGetValue(playerName, out var perkData))
         {
             await RespondAsync(Localization.Get("disc_cmd_player_perks_not_fnd").KeyFormat(("name", playerName)), ephemeral: true);
             return;

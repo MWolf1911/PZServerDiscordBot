@@ -127,6 +127,8 @@ public static class DiscordUtility
         }
     }
 
+    // OBSOLETE: This was used for old CommandService. Slash commands are auto-registered globally.
+    /*
     public static void OrganizeCommands()
     {
         List<CommandInfo> commands = Application.Commands.Commands.ToList();
@@ -144,6 +146,7 @@ public static class DiscordUtility
             commandList[moduleName].Add(new KeyValuePair<string, string>("!"+command.Name, command.Summary ?? Localization.Get("gen_no_desc") + "\n"));
         }
     }
+    */
 
     public static string GetCommandModuleName(string command)
     {

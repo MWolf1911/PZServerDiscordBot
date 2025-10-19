@@ -88,7 +88,7 @@ public class PZServerCommands : InteractionModuleBase<SocketInteractionContext>
     [SlashCommand("kick_player", "Kicks a player from the server.")]
     public async Task KickPlayer([Summary("player_name", "The player's name")] string playerName)
     {
-        ServerUtility.Commands.KickPlayer(playerName);
+        ServerUtility.Commands.KickUser(playerName);
         Logger.WriteLog($"[PZServerCommand - kick_player] Caller: {Context.User}, Params: {playerName}");
 
         await RespondAsync($"Player {playerName} kicked", ephemeral: true);
@@ -97,7 +97,7 @@ public class PZServerCommands : InteractionModuleBase<SocketInteractionContext>
     [SlashCommand("ban_player", "Bans a player from the server.")]
     public async Task BanPlayer([Summary("player_name", "The player's name")] string playerName)
     {
-        ServerUtility.Commands.BanPlayer(playerName);
+        ServerUtility.Commands.BanUser(playerName);
         Logger.WriteLog($"[PZServerCommand - ban_player] Caller: {Context.User}, Params: {playerName}");
 
         await RespondAsync($"Player {playerName} banned", ephemeral: true);
@@ -106,7 +106,7 @@ public class PZServerCommands : InteractionModuleBase<SocketInteractionContext>
     [SlashCommand("make_admin", "Makes a player an admin.")]
     public async Task MakeAdmin([Summary("player_name", "The player's name")] string playerName)
     {
-        ServerUtility.Commands.MakeAdmin(playerName);
+        ServerUtility.Commands.GrantAdmin(playerName);
         Logger.WriteLog($"[PZServerCommand - make_admin] Caller: {Context.User}, Params: {playerName}");
 
         await RespondAsync($"Player {playerName} is now an admin", ephemeral: true);
@@ -122,15 +122,13 @@ public class PZServerCommands : InteractionModuleBase<SocketInteractionContext>
     }
 
     [SlashCommand("teleport_player", "Teleports a player to coordinates.")]
-    public async Task TeleportPlayer([Summary("player_name", "The player's name")] string playerName, 
-                                      [Summary("x", "X coordinate")] int x,
-                                      [Summary("y", "Y coordinate")] int y,
-                                      [Summary("z", "Z coordinate")] int z)
+    public async Task TeleportPlayer([Summary("player1_name", "The player to teleport")] string player1Name, 
+                                      [Summary("player2_name", "The target player to teleport to")] string player2Name)
     {
-        ServerUtility.Commands.TeleportPlayer(playerName, x, y, z);
-        Logger.WriteLog($"[PZServerCommand - teleport_player] Caller: {Context.User}, Params: {playerName} to ({x}, {y}, {z})");
+        ServerUtility.Commands.Teleport(player1Name, player2Name);
+        Logger.WriteLog($"[PZServerCommand - teleport_player] Caller: {Context.User}, Params: {player1Name} teleported to {player2Name}");
 
-        await RespondAsync($"Player {playerName} teleported to ({x}, {y}, {z})", ephemeral: true);
+        await RespondAsync($"Player {player1Name} teleported to {player2Name}", ephemeral: true);
     }
 
     [SlashCommand("start_rain", "Starts rain on the server.")]
