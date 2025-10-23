@@ -45,7 +45,7 @@ namespace Settings
         public ServerScheduleSettings  ServerScheduleSettings  = new ServerScheduleSettings();
         public BotFeatureSettings      BotFeatureSettings      = new BotFeatureSettings();
 
-        public Localization.LocalizationInfo LocalizationInfo = null;
+        public object LocalizationInfo = null;
 
         public void Save()
         {

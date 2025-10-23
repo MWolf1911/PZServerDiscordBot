@@ -24,21 +24,47 @@ public static class Application
 
     private static bool botInitialCheck = false;
 
-    private static void Main(string[] _) => MainAsync().GetAwaiter().GetResult();
+    static Application()
+    {
+        try
+        {
+            File.AppendAllText("startup.log", "Application static ctor\n");
+        }
+        catch
+        {
+        }
+    }
+
+    private static void Main(string[] _)
+    {
+        try
+        {
+            File.AppendAllText("startup.log", "Main start\n");
+        }
+        catch
+        {
+        }
+
+        MainAsync().GetAwaiter().GetResult();
+    }
 
     private static async Task MainAsync()
     {
+        File.AppendAllText("startup.log", "MainAsync start\n");
         if(!File.Exists(Settings.BotSettings.SettingsFile))
         {
+            File.AppendAllText("startup.log", "Settings file missing\n");
             BotSettings = new Settings.BotSettings();
             BotSettings.Save();
         }
         else
         {
+            File.AppendAllText("startup.log", "Loading settings\n");
             BotSettings = JsonConvert.DeserializeObject<Settings.BotSettings>(File.ReadAllText(Settings.BotSettings.SettingsFile), 
                 new JsonSerializerSettings{ObjectCreationHandling = ObjectCreationHandling.Replace});
         }
 
+        File.AppendAllText("startup.log", "Localization.Load\n");
         Localization.Load();
     #if EXPORT_DEFAULT_LOCALIZATION
         Localization.ExportDefault();
@@ -50,6 +76,7 @@ public static class Application
 
         try
         {
+                File.AppendAllText("startup.log", "Checking token\n");
             if(string.IsNullOrEmpty(DiscordUtility.GetToken()))
             {
                 Console.WriteLine(Localization.Get("err_bot_token").KeyFormat(("repo_url", BotRepoURL)));
@@ -67,9 +94,11 @@ public static class Application
         ServerPath.CheckCustomBasePath();
     #endif
 
+        File.AppendAllText("startup.log", "Ensuring localization directory\n");
         if(!Directory.Exists(Localization.LocalizationPath))
             Directory.CreateDirectory(Localization.LocalizationPath);
 
+        File.AppendAllText("startup.log", "Adding schedules\n");
         Scheduler.AddItem(new ScheduleItem("ServerRestart",
                                            Localization.Get("sch_name_serverrestart"),
                                            BotSettings.ServerScheduleSettings.GetServerRestartSchedule(),
@@ -96,12 +125,15 @@ public static class Application
                                            Schedules.BotVersionChecker,
                                            null));
         Localization.AddSchedule();
+    File.AppendAllText("startup.log", "Starting scheduler\n");
         Scheduler.Start(1000);
         
     #if !DEBUG
+    File.AppendAllText("startup.log", "Attempting server start\n");
         ServerUtility.ServerProcess = ServerUtility.Commands.StartServer();
     #endif
 
+    File.AppendAllText("startup.log", "Creating discord client\n");
         Client = new DiscordSocketClient(new DiscordSocketConfig() { GatewayIntents = GatewayIntents.All });
         Interactions = new InteractionService(Client);
         
@@ -110,9 +142,11 @@ public static class Application
             .AddSingleton(Interactions)
             .BuildServiceProvider();
         
+    File.AppendAllText("startup.log", "Initializing interaction handler\n");
         InteractionHandler = new InteractionHandler(Client, Interactions, Services);
         await InteractionHandler.InitializeAsync();
         
+    File.AppendAllText("startup.log", "Logging into Discord\n");
         await Client.LoginAsync(TokenType.Bot, DiscordUtility.GetToken());
         await Client.StartAsync();
         await Client.SetGameAsync(Localization.Get("info_disc_act_bot_ver").KeyFormat(("version", BotVersion)));

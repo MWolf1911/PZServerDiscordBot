@@ -5,6 +5,17 @@ public static class Logger
 {
     public const string LogFile = ".\\pzbot.log";
 
+    static Logger()
+    {
+        try
+        {
+            File.AppendAllText("startup.log", "Logger static ctor\n");
+        }
+        catch
+        {
+        }
+    }
+
     public static string GetLoggingDate()
     {
         return DateTime.UtcNow.ToString("dd/MM/yyyy HH:mm:ss") + " UTC";

@@ -10,6 +10,17 @@ using System.Linq;
 
 public static class Localization
 {
+    static Localization()
+    {
+        try
+        {
+            File.AppendAllText("startup.log", "Localization static ctor\n");
+        }
+        catch
+        {
+        }
+    }
+
     public class LocalizationInfo
     {
         public string Name { get; private set; }
@@ -310,8 +321,12 @@ public static class Localization
         {
             try
             {
-                string localizationFile = $"{LocalizationPath}{Application.BotSettings.LocalizationInfo.File}";
-                localization = JObject.Parse(File.ReadAllText(localizationFile)).ToObject<Dictionary<string, string>>();
+                var localizationInfo = Application.BotSettings.LocalizationInfo as LocalizationInfo;
+                if (localizationInfo != null)
+                {
+                    string localizationFile = $"{LocalizationPath}{localizationInfo.File}";
+                    localization = JObject.Parse(File.ReadAllText(localizationFile)).ToObject<Dictionary<string, string>>();
+                }
             }
             catch(Exception ex) 
             {
@@ -417,7 +432,7 @@ public static class Localization
     public static LocalizationInfo GetCurrentLocalizationInfo()
     {
         if(Application.BotSettings.LocalizationInfo != null)
-            return Application.BotSettings.LocalizationInfo;
+            return Application.BotSettings.LocalizationInfo as LocalizationInfo ?? new LocalizationInfo("Default", "0.0.0", "English translation of the bot.", "-");
 
         return new LocalizationInfo("Default", "0.0.0", "English translation of the bot.", "-");
     }
