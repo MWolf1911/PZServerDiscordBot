@@ -16,8 +16,26 @@ public static class IniParser
 
         public string GetValue(string key)
         {
-            KeyValuePair<string, string> result = iniData.Single(e => e.Key == key);
+            KeyValuePair<string, string> result = iniData.SingleOrDefault(e => e.Key == key);
             return result.Value;
+        }
+
+        public void SetValue(string key, string value)
+        {
+            int index = iniData.FindIndex(e => e.Key == key);
+            if (index >= 0)
+            {
+                iniData[index] = new KeyValuePair<string, string>(key, value);
+            }
+            else
+            {
+                iniData.Add(new KeyValuePair<string, string>(key, value));
+            }
+        }
+
+        public List<KeyValuePair<string, string>> GetAllData()
+        {
+            return iniData;
         }
     }
 
@@ -45,5 +63,26 @@ public static class IniParser
         {}
 
         return resultData.Count > 0 ? new IniData(resultData) : null;
+    }
+
+    public static void Save(string filePath, IniData iniData)
+    {
+        try
+        {
+            var lines = new List<string>();
+            var allData = iniData.GetAllData();
+
+            foreach (var kvp in allData)
+            {
+                lines.Add($"{kvp.Key}={kvp.Value}");
+            }
+
+            File.WriteAllText(filePath, string.Join(Environment.NewLine, lines));
+        }
+        catch (Exception ex)
+        {
+            Logger.WriteLog($"[IniParser] Error saving file {filePath}: {ex.Message}");
+            throw;
+        }
     }
 }

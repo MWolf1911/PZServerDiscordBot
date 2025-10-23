@@ -13,18 +13,6 @@ public class UserCommands : InteractionModuleBase<SocketInteractionContext>
         await RespondAsync(Localization.Get("disc_cmd_bot_info_text").KeyFormat(("repo_url", Application.BotRepoURL)), ephemeral: true);
     }
 
-    [SlashCommand("server_status", "Gets the server status.")]
-    public async Task ServerStatus()
-    {
-        string status = ServerUtility.IsServerRunning() 
-                       ? Localization.Get("disc_cmd_server_status_running")
-                       : ServerBackupCreator.IsRunning
-                       ? Localization.Get("disc_cmd_server_status_backup")
-                       : Localization.Get("disc_cmd_server_status_dead");
-        
-        await RespondAsync(status, ephemeral: true);
-    }
-
     [SlashCommand("restart_time", "Gets the next automated restart time.")]
     public async Task RebootTime()
     {
@@ -54,31 +42,5 @@ public class UserCommands : InteractionModuleBase<SocketInteractionContext>
         int year  = (yearBytes[0] << 24) | (yearBytes[1] << 16) | (yearBytes[2] << 8) | yearBytes[3];
 
         await RespondAsync($"{day}/{month}/{year}", ephemeral: true);
-    }
-
-    [SlashCommand("player_perks", "Gets a player's perks from the last log.")]
-    public async Task GetPlayerPerks([Summary("player_name", "The player's name")] string playerName)
-    {
-        var allPerks = ServerLogParsers.PerkLog.Get();
-        
-        if(allPerks == null || !allPerks.TryGetValue(playerName, out var perkData))
-        {
-            await RespondAsync(Localization.Get("disc_cmd_player_perks_not_fnd").KeyFormat(("name", playerName)), ephemeral: true);
-            return;
-        }
-
-        var embed = new EmbedBuilder()
-        {
-            Title = $"{perkData.Username}",
-            Description = $"Steam ID: {perkData.SteamId}\nLog Date: {perkData.LogDate}",
-            Color = Color.Blue
-        };
-
-        foreach(var perk in perkData.Perks)
-        {
-            embed.AddField(perk.Key, perk.Value.ToString());
-        }
-
-        await RespondAsync(embed: embed.Build(), ephemeral: true);
     }
 }
