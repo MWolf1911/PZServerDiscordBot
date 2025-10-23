@@ -164,12 +164,26 @@ public static class Application
 
                     try 
                     {
-                        Logger.WriteLog("[EVENT] Registering commands globally");
-                        var commands = await Interactions.RegisterCommandsGloballyAsync();
-                        Logger.WriteLog($"[EVENT] Registered {commands.Count} global commands");
-                        foreach(var cmd in commands)
+                        // Try guild-specific registration first (instant) if GuildId is configured
+                        if (Application.BotSettings.GuildId != 0)
                         {
-                            Logger.WriteLog($"[EVENT]   - /{cmd.Name}: {cmd.Description}");
+                            Logger.WriteLog($"[EVENT] Registering commands to guild {Application.BotSettings.GuildId}");
+                            var guildCommands = await Interactions.RegisterCommandsToGuildAsync(Application.BotSettings.GuildId);
+                            Logger.WriteLog($"[EVENT] Registered {guildCommands.Count} guild commands");
+                            foreach(var cmd in guildCommands)
+                            {
+                                Logger.WriteLog($"[EVENT]   - /{cmd.Name}: {cmd.Description}");
+                            }
+                        }
+                        else
+                        {
+                            Logger.WriteLog("[EVENT] No GuildId configured, registering commands globally (may take up to 1 hour to appear)");
+                            var commands = await Interactions.RegisterCommandsGloballyAsync();
+                            Logger.WriteLog($"[EVENT] Registered {commands.Count} global commands");
+                            foreach(var cmd in commands)
+                            {
+                                Logger.WriteLog($"[EVENT]   - /{cmd.Name}: {cmd.Description}");
+                            }
                         }
                     }
                     catch(Exception ex)
