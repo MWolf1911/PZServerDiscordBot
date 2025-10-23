@@ -26,15 +26,6 @@ public class InteractionHandler
         await _interactions.AddModulesAsync(Assembly.GetEntryAssembly(), _services);
     }
 
-    private Task SlashCommandExecutedAsync(SlashCommandInfo commandInfo, IInteractionContext context, IResult result)
-    {
-        if (!result.IsSuccess)
-        {
-            Logger.WriteLog($"Slash command '{commandInfo.Name}' failed: {result.Error}");
-        }
-        return Task.CompletedTask;
-    }
-
     private async Task HandleInteractionAsync(SocketInteraction interaction)
     {
         try
@@ -60,7 +51,7 @@ public class InteractionHandler
         }
     }
 
-    private async Task SlashCommandExecutedAsync(SlashCommandInfo command, SocketInteractionContext context, IResult result)
+    private async Task SlashCommandExecutedAsync(SlashCommandInfo command, IInteractionContext context, IResult result)
     {
         if (!result.IsSuccess)
         {

@@ -7,6 +7,7 @@ using Newtonsoft.Json;
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -26,46 +27,52 @@ public static class Application
 
     static Application()
     {
-        try
-        {
-            File.AppendAllText("startup.log", "Application static ctor\n");
-        }
-        catch
-        {
-        }
+        // Static constructor - no initialization needed
     }
 
     private static void Main(string[] _)
     {
-        try
+        RunSynchronousSetup();
+        
+        // Create a separate thread with a large stack size to avoid Discord.NET stack overflow on .NET 4.7.2
+        Thread discordThread = new Thread(() =>
         {
-            File.AppendAllText("startup.log", "Main start\n");
-        }
-        catch
+            try
+            {
+                StartDiscordSync();
+            }
+            catch (Exception ex)
+            {
+                Logger.WriteLog($"[FATAL] Discord thread exception: {ex.GetType().Name}: {ex.Message}");
+                Logger.LogException(ex);
+                Environment.Exit(1);
+            }
+        }, 64 * 1024 * 1024) // 64MB stack to avoid Discord.NET initialization stack overflow
         {
-        }
-
-        MainAsync().GetAwaiter().GetResult();
+            Name = "DiscordClientThread",
+            IsBackground = true
+        };
+        discordThread.Start();
+        
+        // Keep main thread alive for scheduler and commands
+        System.Threading.Thread.Sleep(System.Threading.Timeout.Infinite);
     }
 
-    private static async Task MainAsync()
+    private static void RunSynchronousSetup()
     {
-        File.AppendAllText("startup.log", "MainAsync start\n");
-        return;
-        if(!File.Exists(Settings.BotSettings.SettingsFile))
+        const string SETTINGS_FILE = ".\\pzdiscordbot.conf";
+        
+        if(!File.Exists(SETTINGS_FILE))
         {
-            File.AppendAllText("startup.log", "Settings file missing\n");
             BotSettings = new Settings.BotSettings();
             BotSettings.Save();
         }
         else
         {
-            File.AppendAllText("startup.log", "Loading settings\n");
-            BotSettings = JsonConvert.DeserializeObject<Settings.BotSettings>(File.ReadAllText(Settings.BotSettings.SettingsFile), 
+            BotSettings = JsonConvert.DeserializeObject<Settings.BotSettings>(File.ReadAllText(SETTINGS_FILE), 
                 new JsonSerializerSettings{ObjectCreationHandling = ObjectCreationHandling.Replace});
         }
 
-        File.AppendAllText("startup.log", "Localization.Load\n");
         Localization.Load();
     #if EXPORT_DEFAULT_LOCALIZATION
         Localization.ExportDefault();
@@ -75,31 +82,19 @@ public static class Application
         Console.WriteLine(Localization.Get("warn_debug_mode"));
     #endif
 
-        try
+        if(string.IsNullOrEmpty(DiscordUtility.GetToken()))
         {
-                File.AppendAllText("startup.log", "Checking token\n");
-            if(string.IsNullOrEmpty(DiscordUtility.GetToken()))
-            {
-                Console.WriteLine(Localization.Get("err_bot_token").KeyFormat(("repo_url", BotRepoURL)));
-                await Task.Delay(-1);
-            }
-        }
-        catch(Exception ex)
-        {
-            Logger.LogException(ex);
-            Console.WriteLine(Localization.Get("err_retv_bot_token").KeyFormat(("log_file", Logger.LogFile), ("repo_url", BotRepoURL)));
-            await Task.Delay(-1);
+            Console.WriteLine(Localization.Get("err_bot_token").KeyFormat(("repo_url", BotRepoURL)));
+            Environment.Exit(1);
         }
 
     #if !DEBUG
         ServerPath.CheckCustomBasePath();
     #endif
 
-        File.AppendAllText("startup.log", "Ensuring localization directory\n");
         if(!Directory.Exists(Localization.LocalizationPath))
             Directory.CreateDirectory(Localization.LocalizationPath);
 
-        File.AppendAllText("startup.log", "Adding schedules\n");
         Scheduler.AddItem(new ScheduleItem("ServerRestart",
                                            Localization.Get("sch_name_serverrestart"),
                                            BotSettings.ServerScheduleSettings.GetServerRestartSchedule(),
@@ -126,67 +121,151 @@ public static class Application
                                            Schedules.BotVersionChecker,
                                            null));
         Localization.AddSchedule();
-    File.AppendAllText("startup.log", "Starting scheduler\n");
+        
         Scheduler.Start(1000);
         
-    #if !DEBUG
-    File.AppendAllText("startup.log", "Attempting server start\n");
-        ServerUtility.ServerProcess = ServerUtility.Commands.StartServer();
-    #endif
+        // Server auto-start disabled - use /start_server command to start
+    }
 
-    File.AppendAllText("startup.log", "Creating discord client\n");
-        Client = new DiscordSocketClient(new DiscordSocketConfig() { GatewayIntents = GatewayIntents.All });
-        Interactions = new InteractionService(Client);
-        
-        Services = new ServiceCollection()
-            .AddSingleton(Client)
-            .AddSingleton(Interactions)
-            .BuildServiceProvider();
-        
-    File.AppendAllText("startup.log", "Initializing interaction handler\n");
-        InteractionHandler = new InteractionHandler(Client, Interactions, Services);
-        await InteractionHandler.InitializeAsync();
-        
-    File.AppendAllText("startup.log", "Logging into Discord\n");
-        await Client.LoginAsync(TokenType.Bot, DiscordUtility.GetToken());
-        await Client.StartAsync();
-        await Client.SetGameAsync(Localization.Get("info_disc_act_bot_ver").KeyFormat(("version", BotVersion)));
-
-        Client.Ready += async () =>
+    private static void StartDiscordSync()
+    {
+        try
         {
-            if(!botInitialCheck)
+            Logger.WriteLog("Discord: Initializing client");
+            
+            Client = new DiscordSocketClient(new DiscordSocketConfig() { GatewayIntents = GatewayIntents.All });
+            Interactions = new InteractionService(Client);
+            Services = new ServiceCollection()
+                .AddSingleton(Client)
+                .AddSingleton(Interactions)
+                .BuildServiceProvider();
+            InteractionHandler = new InteractionHandler(Client, Interactions, Services);
+            
+            // Attach event handlers BEFORE starting the client
+            Client.Ready += async () =>
             {
-                botInitialCheck = true;
-
-                try 
+                Logger.WriteLog("[EVENT] Bot Ready");
+                if(!botInitialCheck)
                 {
-                    await Interactions.RegisterCommandsGloballyAsync();
+                    botInitialCheck = true;
+                    Logger.WriteLog("[EVENT] Performing initial ready checks");
+
+                    try 
+                    {
+                        Logger.WriteLog("[EVENT] Initializing interaction handler");
+                        await InteractionHandler.InitializeAsync();
+                        Logger.WriteLog("[EVENT] Interaction handler initialized");
+                    }
+                    catch(Exception ex)
+                    {
+                        Logger.WriteLog($"[EVENT] Interaction handler init error: {ex.GetType().Name}: {ex.Message}");
+                        Logger.LogException(ex);
+                    }
+
+                    try 
+                    {
+                        Logger.WriteLog("[EVENT] Registering commands globally");
+                        var commands = await Interactions.RegisterCommandsGloballyAsync();
+                        Logger.WriteLog($"[EVENT] Registered {commands.Count} global commands");
+                        foreach(var cmd in commands)
+                        {
+                            Logger.WriteLog($"[EVENT]   - /{cmd.Name}: {cmd.Description}");
+                        }
+                    }
+                    catch(Exception ex)
+                    {
+                        Logger.WriteLog($"[EVENT] Command registration error: {ex.GetType().Name}: {ex.Message}");
+                        Logger.LogException(ex);
+                    }
+
+                    try
+                    {
+                        Logger.WriteLog("[EVENT] Doing channel check");
+                        await DiscordUtility.DoChannelCheck();
+                        Logger.WriteLog("[EVENT] Channel check complete");
+                    }
+                    catch(Exception ex)
+                    {
+                        Logger.WriteLog($"[EVENT] Channel check error: {ex.Message}");
+                    }
+
+                    try
+                    {
+                        Logger.WriteLog("[EVENT] Notifying latest bot version");
+                        await BotUtility.NotifyLatestBotVersion();
+                        Logger.WriteLog("[EVENT] Version notify complete");
+                    }
+                    catch(Exception ex)
+                    {
+                        Logger.WriteLog($"[EVENT] Bot version notify error: {ex.Message}");
+                    }
+
+                    try
+                    {
+                        Logger.WriteLog("[EVENT] Checking localization update");
+                        await Localization.CheckUpdate();
+                        Logger.WriteLog("[EVENT] Localization check complete");
+                    }
+                    catch(Exception ex)
+                    {
+                        Logger.WriteLog($"[EVENT] Localization check error: {ex.Message}");
+                    }
+                }
+            };
+
+            Client.Disconnected += async (ex) =>
+            {
+                Logger.WriteLog($"[EVENT] Bot Disconnected: {ex?.GetType().Name}");
+                Logger.LogException(ex);
+                if(ex?.InnerException != null)
+                {
+                    Logger.WriteLog($"[EVENT] Inner Exception: {ex.InnerException.GetType().Name}");
+                    Logger.LogException(ex.InnerException);
+                }
+
+                if(ex?.InnerException?.Message.Contains("Authentication failed") == true)
+                {
+                    Logger.WriteLog("[EVENT] Authentication failed - exiting");
+                    Console.WriteLine(Localization.Get("err_disc_auth_fail"));
+                    Environment.Exit(1);
+                }
+            };
+            
+            Logger.WriteLog("Discord: Event handlers attached");
+
+            // Fire-and-forget async Discord login and start - runs independently
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    Logger.WriteLog("Discord: Logging in");
+                    await Client.LoginAsync(TokenType.Bot, DiscordUtility.GetToken());
+                    Logger.WriteLog("Discord: Login complete");
+                    
+                    Logger.WriteLog("Discord: Starting client");
+                    await Client.StartAsync();
+                    Logger.WriteLog("Discord: Client started successfully");
+                    
+                    await Client.SetGameAsync(Localization.Get("info_disc_act_bot_ver").KeyFormat(("version", BotVersion)));
+                    Logger.WriteLog("Discord: Bot is now running");
+                    
+                    await Task.Delay(-1); // Keep Discord client running
                 }
                 catch(Exception ex)
                 {
+                    Logger.WriteLog($"[FATAL] Discord async error: {ex.GetType().Name}: {ex.Message}");
                     Logger.LogException(ex);
+                    Environment.Exit(1);
                 }
-
-                await DiscordUtility.DoChannelCheck();
-                await BotUtility.NotifyLatestBotVersion();
-                await Localization.CheckUpdate();
-            }
-        };
-
-        Client.Disconnected += async (ex) =>
+            });
+        }
+        catch(Exception ex)
         {
+            Logger.WriteLog($"[FATAL] Discord initialization error: {ex.GetType().Name}: {ex.Message}");
             Logger.LogException(ex);
-            if(ex.InnerException != null)
-                Logger.LogException(ex.InnerException);
-
-            if(ex.InnerException?.Message.Contains("Authentication failed") == true)
-            {
-                Console.WriteLine(Localization.Get("err_disc_auth_fail"));
-                await Task.Delay(-1);
-            }
-        };
-
-        await Task.Delay(-1);
+            throw;
+        }
     }
 }
+
 

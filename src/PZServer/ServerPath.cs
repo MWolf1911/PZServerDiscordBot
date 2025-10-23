@@ -2,23 +2,26 @@
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using System.Threading.Tasks;
 
 public static class ServerPath
 {
     public static string BasePath = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile) + "\\Zomboid\\";
 
-    public static async void CheckCustomBasePath()
+    public static void CheckCustomBasePath()
     {
         string serverFile = "./server.bat";
 
         if(!File.Exists(serverFile))
         {
             Console.WriteLine(Localization.Get("err_serv_bat"));
-            await Task.Delay(-1);
+            File.AppendAllText("startup.log", "ERROR: server.bat not found!\n");
+            Environment.Exit(1);
         }
 
-        string[] lines = File.ReadAllLines(serverFile);
+        try
+        {
+            File.AppendAllText("startup.log", "Setup: Parsing server.bat\n");
+            string[] lines = File.ReadAllLines(serverFile);
 
         for(int i=0; i < lines.Length; i++)
         {
@@ -53,6 +56,13 @@ public static class ServerPath
                 File.WriteAllLines(serverFile, newLines);
                 break;
             }
+        }
+            File.AppendAllText("startup.log", "Setup: server.bat parsed successfully\n");
+        }
+        catch (Exception ex)
+        {
+            File.AppendAllText("startup.log", $"ERROR parsing server.bat: {ex.Message}\n");
+            throw;
         }
     }
 
