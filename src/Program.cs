@@ -51,6 +51,7 @@ public static class Application
     private static async Task MainAsync()
     {
         File.AppendAllText("startup.log", "MainAsync start\n");
+        return;
         if(!File.Exists(Settings.BotSettings.SettingsFile))
         {
             File.AppendAllText("startup.log", "Settings file missing\n");
